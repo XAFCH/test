@@ -1,0 +1,816 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>大模型超声诊断</title>
+  <style>
+            #transcriptionResult {
+            white-space: pre-wrap; /* Preserve whitespace and line breaks */
+            background-color: #f5f5f5;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-family: monospace;
+        }
+        #recordButton.recording {
+            background-color: red;
+            color: white;
+        }
+    body {
+      display: flex;
+      flex-direction: row;
+      justify-content: space-between;
+      height: 100vh;
+      margin: 0;
+      padding: 0;
+    }
+    .left-panel, .right-panel {
+      width: 50%;
+      padding: 20px;
+      box-sizing: border-box;
+    }
+    .right-panel {
+      border-left: 2px solid #ccc;
+      overflow-y: auto;
+      display: none; /* 默认隐藏 */
+    }
+    .report-container {
+      background-color: white;
+      padding: 30px;
+      border-radius: 10px;
+      box-shadow: 0 0 10px rgba(0,0,0,0.1);
+    }
+    .header {
+      text-align: center;
+      border-bottom: 3px solid #0066cc;
+      padding-bottom: 15px;
+      margin-bottom: 25px;
+    }
+    .hospital-name {
+      color: #0066cc;
+      font-size: 28px;
+      font-weight: bold;
+      margin-bottom: 5px;
+    }
+    .report-title {
+      font-size: 22px;
+      margin: 15px 0;
+    }
+    .patient-info {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 20px;
+    }
+    .info-section {
+      width: 48%;
+    }
+    .info-item {
+      margin: 8px 0;
+      font-size: 16px;
+    }
+    .section-title {
+      color: #0066cc;
+      font-size: 18px;
+      font-weight: bold;
+      margin: 20px 0 10px;
+      border-left: 4px solid #0066cc;
+      padding-left: 10px;
+    }
+    .ultrasound-findings {
+      line-height: 1.6;
+      margin-bottom: 20px;
+    }
+    .conclusion {
+      background-color: #f0f8ff;
+      padding: 15px;
+      border-radius: 5px;
+      margin: 20px 0;
+    }
+    .signature-section {
+      text-align: right;
+      margin-top: 30px;
+    }
+    @media print {
+      body {
+        background-color: white;
+        margin: 0;
+      }
+      .report-container {
+        box-shadow: none;
+      }
+    }
+    .image-gallery {
+      margin: 20px 0;
+      display: flex;
+      justify-content: space-between;
+      gap: 15px;
+    }
+    .image-item {
+      flex: 1;
+      background: #f8f8f8;
+      border-radius: 8px;
+      padding: 10px;
+      text-align: center;
+    }
+    .medical-image {
+      max-width: 100%;
+      height: 180px;
+      object-fit: contain;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+    }
+    .image-label {
+      font-size: 13px;
+      color: #666;
+      margin-top: 8px;
+    }
+    /* 新增的CSS */
+    .three-d-button {
+      background-color: #007bff;
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      font-size: 16px;
+      cursor: pointer;
+      box-shadow: 0 4px #0056b3;
+      border-radius: 5px;
+      transition: all 0.1s ease;
+      display: inline-block;
+    }
+
+    .button-active {
+      box-shadow: 0 2px #0056b3;
+      transform: translateY(2px) scale(0.98); /* 添加缩放效果 */
+    }
+
+    /* 文本框标题的样式 */
+    .textbox-label {
+      font-size: 18px; /* 放大一号字体 */
+      margin-top: 20px; /* 往下挪一行 */
+      display: block;
+    }
+  </style>
+</head>
+<body>
+  <div class="left-panel">
+    <h1>大模型超声诊断</h1>
+    <button id="recordButton">开始录音</button>
+    <button id="Diagnostic generation">生成诊断</button>
+<!--        <label>-->
+<!--            <input type="checkbox" id="Diagnostic generation"> 生成诊断-->
+<!--        </label>-->
+        <label>
+            语言:
+            <input id="lang" type="text" value="自动" />
+        </label>
+        <label>
+            <input type="checkbox" id="speakerVerification"> 声纹验证
+        </label>
+        <hr />
+        文字转录结果如下:
+        <p id="transcriptionResult"></p>
+    <button id="startBtn" class="three-d-button">开始录音</button>
+    <button id="stopBtn" class="three-d-button" disabled>结束录音</button>
+    <button id="playBtn" class="three-d-button" disabled>读取录音</button>
+    <button id="generateBtn" class="three-d-button" disabled>生成文本</button>
+    <button id="reportBtn" class="three-d-button">生成诊断</button>
+
+    <!-- 音频播放器（可选） -->
+    <audio id="audioPlayer" controls style="display:none;"></audio>
+
+    <!-- 用于显示读取的 .txt 文件输出的文本框 -->
+    <div>
+      <label for="scriptOutput" class="textbox-label">输出结果:</label>
+<!--      <textarea id="scriptOutput" readonly style="width:100%; height:300px;"></textarea>-->
+      <textarea id="scriptOutput" readonly style="width:100%; height:300px; font-size:20px !important;"></textarea>
+    </div>
+
+    <!-- 用于显示生成的文本的文本框 -->
+    <div>
+      <label for="generatedText" class="textbox-label">生成文本:</label>
+<!--      <textarea id="generatedText" readonly style="width:100%; height:300px;"></textarea>-->
+      <textarea id="generatedText" readonly style="width:100%; height:300px; font-size:20px !important;"></textarea>
+
+    </div>
+  </div>
+  <div class="right-panel" id="reportContainer">
+    <div class="report-container">
+      <div class="header">
+        <div class="hospital-name">青岛市人民医院</div>
+        <div class="report-title">超声检查报告单</div>
+        <div>（医学影像科）</div>
+      </div>
+
+      <div class="patient-info">
+        <div class="info-section">
+          <div class="info-item">姓名：王某某</div>
+          <div class="info-item">性别：女</div>
+          <div class="info-item">年龄：35岁</div>
+        </div>
+        <div class="info-section">
+          <div class="info-item">检查号：20231128001</div>
+          <div class="info-item">科室：普外科</div>
+          <div class="info-item">床号：12</div>
+        </div>
+      </div>
+
+      <div class="section-title">超声图像：</div>
+      <div class="image-gallery">
+        <div class="image-item">
+          <img src="{{ url_for('static', filename='images/甲状腺横切面.jpg') }}" alt="甲状腺横切面" class="medical-image">
+          <div class="image-label">图1：甲状腺横切面</div>
+        </div>
+        <div class="image-item">
+          <img src="{{ url_for('static', filename='images/结节血流信号.webp') }}" alt="结节血流信号" class="medical-image">
+          <div class="image-label">图2：CDFI血流信号</div>
+        </div>
+        <div class="image-item">
+          <img src="{{ url_for('static', filename='images/弹性成像.webp') }}" alt="弹性成像" class="medical-image">
+          <div class="image-label">图3：弹性成像</div>
+        </div>
+      </div>
+
+      <div class="section-title">超声机描述：</div>
+      <div class="ultrasound-findings">
+        <ul>
+          <li>检查部位：甲状腺</li>
+          <li>甲状腺右叶大小：4.5×2.0×1.8cm，左叶大小：4.3×2.1×1.7cm</li>
+          <li>右侧叶中部见低回声结节，大小约0.8×0.6cm，边界尚清，形态尚规则，内见点状强回声</li>
+          <li>CDFI：结节内可见血流信号</li>
+          <li>双侧颈部未见明显异常肿大淋巴结</li>
+        </ul>
+      </div>
+      <div class="section-title">大模型诊断：</div>
+      <div class="conclusion">
+        <div id="generatedText2" style="width:100%; height:300px"></div>
+<!--        <textarea id="generatedText2" readonly style="width:100%; height:300px;"></textarea>-->
+<!--        <div class="conclusion">-->
+<!--          <div id="transfer-success" style="display: none; color: black; margin-top: 20px;">-->
+<!--              数据传输成功！-->
+<!--          </div>-->
+      </div>
+<!--      <div class="section-title">模型诊断：</div>-->
+<!--      <div class="conclusion">-->
+<!--        <div id="transfer-success" style="display: none; color: black; margin-top: 20px;">-->
+<!--            数据传输成功！-->
+<!--        </div>-->
+<!--      </div>-->
+      <div class="signature-section">
+        <div>报告医师：李某某</div>
+        <div>审核医师：张某某</div>
+        <div>报告时间：<span id="report-time"></span></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let mediaRecorder;
+    let recordedChunks = [];
+    let microphoneStream;
+    let lastFilename = "";
+    let lastTxtFilePath = "";
+ var recordButton = document.getElementById('recordButton');
+    var transcriptionResult = document.getElementById('transcriptionResult');
+    navigator.getUserMedia = navigator.getUserMedia || navigator.webkitGetUserMedia;
+    var ws = null;
+    var record = null;
+    var timeInte = null;
+    var isRecording = false;
+
+    recordButton.onclick = function() {
+        if (!isRecording) {
+            startRecording();
+        } else {
+            stopRecording();
+        }
+    };
+
+    function startRecording() {
+        console.log('Start Recording');
+        var speakerVerificationCheckbox = document.getElementById('speakerVerification');
+        var sv = speakerVerificationCheckbox.checked ? 1 : 0;
+        var lang = document.getElementById("lang").value
+        // Construct the query parameters
+        var queryParams = [];
+        if (lang) {
+            queryParams.push(`lang=${lang}`);
+        }
+        if (sv) {
+            queryParams.push('sv=1');
+        }
+        var queryString = queryParams.length > 0 ? `?${queryParams.join('&')}` : '';
+
+        // ws = new WebSocket(`wss://your_wss_server_address/ws/transcribe${queryString}`);
+        ws = new WebSocket('ws://127.0.0.1:5001/ws/transcribe?lang=auto');
+        ws.binaryType = 'arraybuffer';
+
+        ws.onopen = function(event) {
+            console.log('WebSocket connection established');
+            record.start();
+            timeInte = setInterval(function() {
+                if(ws.readyState === 1) {
+                    var audioBlob = record.getBlob();
+                    console.log('Blob size: ', audioBlob.size);
+
+                    // Read the Blob content for debugging
+                    var reader = new FileReader();
+                    reader.onloadend = function() {
+                        console.log('Blob content: ', new Uint8Array(reader.result));
+                        ws.send(audioBlob);
+                        console.log('Sending audio data');
+                        record.clear();
+                    };
+                    reader.readAsArrayBuffer(audioBlob);
+                }
+            }, 500);
+        };
+
+        ws.onmessage = function(evt) {
+            console.log('Received message: ' + evt.data);
+            try {
+                resJson = JSON.parse(evt.data)
+                if (resJson.code == 0) {
+                    var jsonResponse = JSON.stringify(resJson, null, 4);
+                    transcriptionResult.textContent += "\n" + (resJson.data || 'No speech recognized');
+                }
+            } catch (e) {
+                console.error('Failed to parse response data', e);
+                transcriptionResult.textContent += "\n" + evt.data;
+            }
+        };
+
+        ws.onclose = function() {
+            console.log('WebSocket connection closed');
+        };
+
+        ws.onerror = function(error) {
+            console.error('WebSocket error: ' + error);
+        };
+
+        recordButton.textContent = "结束录音";
+        recordButton.classList.add("recording");
+        isRecording = true;
+    }
+
+    // function stopRecording() {
+    //     console.log('Stop Recording');
+    //     if (ws) {
+    //         ws.close();
+    //         record.stop();
+    //         clearInterval(timeInte);
+    //     }
+    //     recordButton.textContent = "Start Recording";
+    //     recordButton.classList.remove("recording");
+    //     isRecording = false;
+    // }
+function stopRecording() {
+    console.log('Stop Recording');
+    if (ws) {
+        ws.close();
+        record.stop();
+        clearInterval(timeInte);
+    }
+    recordButton.textContent = "开始录音";
+    recordButton.classList.remove("recording");
+    isRecording = false;
+
+    // 获取转录的文本内容
+    const textToSave = transcriptionResult.textContent.trim();
+
+    // 发送到后端保存
+   fetch('/save_text', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: transcriptionResult.textContent.trim() }),
+    })
+    .then(response => response.json())
+    .then(data => {
+        console.log('保存响应:', data); // 添加调试日志
+        if (data.status === 'success') {
+            lastTranscriptionPath = data.filepath; // 确保这行执行了
+            console.log('保存的路径:', lastTranscriptionPath); // 调试日志
+        }
+    })
+    .catch(error => console.error('保存错误:', error));
+}
+
+
+    function init(rec) {
+        record = rec;
+    }
+
+    if (!navigator.getUserMedia) {
+        alert('Your browser does not support audio input');
+    } else {
+        navigator.getUserMedia(
+            { audio: true },
+            function(mediaStream) {
+                init(new Recorder(mediaStream));
+            },
+            function(error) {
+                console.log(error);
+            }
+        );
+    }
+
+    var Recorder = function(stream) {
+        var sampleBits = 16; // Sample bits
+        var inputSampleRate = 48000; // Input sample rate
+        var outputSampleRate = 16000; // Output sample rate
+        var channelCount = 1; // Single channel
+        var context = new AudioContext();
+        var audioInput = context.createMediaStreamSource(stream);
+        var recorder = context.createScriptProcessor(4096, channelCount, channelCount);
+        var audioData = {
+            size: 0,
+            buffer: [],
+            inputSampleRate: inputSampleRate,
+            inputSampleBits: sampleBits,
+            clear: function() {
+                this.buffer = [];
+                this.size = 0;
+            },
+            input: function(data) {
+                this.buffer.push(new Float32Array(data));
+                this.size += data.length;
+            },
+            encodePCM: function() {
+                var bytes = new Float32Array(this.size);
+                var offset = 0;
+                for (var i = 0; i < this.buffer.length; i++) {
+                    bytes.set(this.buffer[i], offset);
+                    offset += this.buffer[i].length;
+                }
+                var dataLength = bytes.length * (sampleBits / 8);
+                var buffer = new ArrayBuffer(dataLength);
+                var data = new DataView(buffer);
+                offset = 0;
+                for (var i = 0; i < bytes.length; i++, offset += 2) {
+                    var s = Math.max(-1, Math.min(1, bytes[i]));
+                    data.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
+                }
+                return new Blob([data], { type: 'audio/pcm' });
+            }
+        };
+
+        this.start = function() {
+            audioInput.connect(recorder);
+            recorder.connect(context.destination);
+        };
+
+        this.stop = function() {
+            recorder.disconnect();
+        };
+
+        this.getBlob = function() {
+            return audioData.encodePCM();
+        };
+
+        this.clear = function() {
+            audioData.clear();
+        };
+
+        function downsampleBuffer(buffer, inputSampleRate, outputSampleRate) {
+            if (outputSampleRate === inputSampleRate) {
+                return buffer;
+            }
+            var sampleRateRatio = inputSampleRate / outputSampleRate;
+            var newLength = Math.round(buffer.length / sampleRateRatio);
+            var result = new Float32Array(newLength);
+            var offsetResult = 0;
+            var offsetBuffer = 0;
+            while (offsetResult < result.length) {
+                var nextOffsetBuffer = Math.round((offsetResult + 1) * sampleRateRatio);
+                var accum = 0, count = 0;
+                for (var i = offsetBuffer; i < nextOffsetBuffer && i < buffer.length; i++) {
+                    accum += buffer[i];
+                    count++;
+                }
+                result[offsetResult] = accum / count;
+                offsetResult++;
+                offsetBuffer = nextOffsetBuffer;
+            }
+            return result;
+        }
+
+        recorder.onaudioprocess = function(e) {
+            console.log('onaudioprocess called');
+            var resampledData = downsampleBuffer(e.inputBuffer.getChannelData(0), inputSampleRate, outputSampleRate);
+            audioData.input(resampledData);
+        };
+    };
+
+    // 初始化麦克风和 MediaRecorder
+    function initRecorder() {
+      return navigator.mediaDevices.getUserMedia({ audio: true })
+        .then(stream => {
+          microphoneStream = stream;
+          mediaRecorder = new MediaRecorder(stream, { mimeType: "audio/webm" });
+          mediaRecorder.ondataavailable = function(event) {
+            if (event.data.size > 0) {
+              recordedChunks.push(event.data);
+            }
+          };
+          mediaRecorder.onstop = onRecordingStop;
+          console.log("Recorder initialized");
+        });
+    }
+
+    function onRecordingStop() {
+      const blob = new Blob(recordedChunks, { type: "audio/webm" });
+      recordedChunks = [];
+
+      // 释放麦克风资源
+      if (microphoneStream) {
+        microphoneStream.getTracks().forEach(track => track.stop());
+      }
+
+      console.log("Recording stopped");
+
+      // 上传 WebM 文件到后端
+      const formData = new FormData();
+      formData.append("audio_data", blob, "recording.webm");
+      fetch("/save", {
+        method: "POST",
+        body: formData
+      })
+      .then(response => response.json())
+      .then(result => {
+        alert(result.message);
+        if(result.filename) {
+          lastFilename = result.filename;
+          lastTxtFilePath = result.txt_file;
+          document.getElementById("playBtn").disabled = false;
+          document.getElementById("generateBtn").disabled = false;
+        }
+      })
+      .catch(error => {
+        console.error("上传错误:", error);
+      });
+    }
+
+    document.getElementById("startBtn").addEventListener("click", function() {
+      console.log("Start button clicked");
+      initRecorder().then(() => {
+        mediaRecorder.start();
+        console.log("Recording started");
+        setActiveButton(this);
+        document.getElementById("startBtn").disabled = true;
+        document.getElementById("stopBtn").disabled = false;
+      }).catch(error => {
+        console.error("无法获取麦克风权限:", error);
+        alert("无法获取麦克风权限，请检查设备设置。");
+      });
+    });
+
+    document.getElementById("stopBtn").addEventListener("click", function() {
+      console.log("Stop button clicked");
+      mediaRecorder.stop();
+      setActiveButton(this);
+      this.disabled = true;
+      document.getElementById("startBtn").disabled = false;
+    });
+
+    // 当点击“读取录音”按钮时，调用 /read 端点获取外部脚本的输出，并显示在文本框中。
+    document.getElementById("playBtn").addEventListener("click", function() {
+      console.log("Play button clicked");
+      fetch("/read")
+      .then(response => response.json())
+      .then(result => {
+        document.getElementById("scriptOutput").value = result.message;
+        setActiveButton(this);
+      })
+      .catch(error => {
+        console.error("读取错误:", error);
+        alert("读取录音失败！");
+      });
+    });
+
+     // 当点击“生成文本”按钮时，调用 /generate 端点获取生成的文本，并显示在文本框中。
+    // 全局变量保存最新转录文件路径
+let lastTranscriptionPath = '';
+
+// 当点击"生成文本"按钮时
+document.getElementById("Diagnostic generation").addEventListener("click", function() {
+  console.log("Generate button clicked");
+
+  // 如果没有保存过转录文件，提示用户先录音
+  if (!lastTranscriptionPath) {
+    alert("请先完成录音并保存转录文本！");
+    return;
+  }
+
+  fetch("/generate", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      path: lastTranscriptionPath // 使用最新转录文件路径
+    })
+  })
+  .then(response => response.json())
+  .then(result => {
+    if (result.response) {
+      document.getElementById("generatedText").value = result.response;
+      document.getElementById("generatedText2").textContent = result.response;
+    } else if (result.error) {
+      document.getElementById("generatedText").value = "Error: " + result.error;
+    }
+    setActiveButton(this);
+  })
+  .catch(error => {
+    console.error("生成文本错误:", error);
+    alert("生成文本失败！");
+  });
+});
+
+
+    // 当点击“生成文本”按钮时，调用 /generate 端点获取生成的文本，并显示在文本框中。
+    document.getElementById("generateBtn").addEventListener("click", function() {
+      console.log("Generate button clicked");
+      fetch("/generate", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ path: lastTxtFilePath }) // 使用最新生成的 .txt 文件的路径
+      })
+      .then(response => response.json())
+      .then(result => {
+        if (result.response) {
+          document.getElementById("generatedText").value = result.response;
+          document.getElementById("generatedText2").textContent = result.response;
+        } else if (result.error) {
+          document.getElementById("generatedText").value = "Error: " + result.error;
+        }
+        setActiveButton(this);
+      })
+      .catch(error => {
+        console.error("生成文本错误:", error);
+        alert("生成文本失败！");
+      });
+    });
+
+<!--document.getElementById("generateBtn").addEventListener("click", function() {-->
+<!--  console.log("Generate button clicked");-->
+
+<!--  fetch("/generate", {-->
+<!--    method: "POST",-->
+<!--    headers: {-->
+<!--      "Content-Type": "application/json"-->
+<!--    },-->
+<!--    body: JSON.stringify({ path: lastTxtFilePath }) // 使用最新生成的 .txt 文件的路径-->
+<!--  })-->
+<!--  .then(response => response.json())-->
+<!--  .then(result => {-->
+<!--    if (result.response) {-->
+<!--      // 保持 generatedText 不变-->
+<!--      document.getElementById("generatedText").value = result.response;-->
+
+<!--      // 格式化并显示 generatedText2 的结果-->
+<!--      document.getElementById("generatedText2").innerHTML = formatReport(result.response);-->
+<!--    } else if (result.error) {-->
+<!--      document.getElementById("generatedText").value = "Error: " + result.error;-->
+<!--    }-->
+<!--    setActiveButton(this);-->
+<!--  })-->
+<!--  .catch(error => {-->
+<!--    console.error("生成文本错误:", error);-->
+<!--    alert("生成文本失败！");-->
+<!--  });-->
+<!--});-->
+
+<!--// 处理模型输出，将其转换为HTML格式-->
+<!--function formatReport(text) {-->
+<!--  // 假设后端返回的内容是这样的格式-->
+<!--  const [ultrasoundDescription, modelDiagnosis] = text.split('模型诊断：');-->
+
+<!--  let formattedHtml = '<div>';-->
+
+<!--  // 超声提示部分-->
+<!--&lt;!&ndash;  formattedHtml += '<h3>1. 超声提示</h3>';&ndash;&gt;-->
+<!--  formattedHtml += '<ul style="margin-left: 0.1px;">'; // 减少左边距-->
+<!--  ultrasoundDescription.trim().split('\n').forEach(line => {-->
+<!--    if (line.trim()) { // 忽略空行-->
+<!--      formattedHtml += `<li>${line.trim()}</li>`;-->
+<!--    }-->
+<!--  });-->
+<!--  formattedHtml += '</ul>';-->
+
+<!--  // 模型诊断部分-->
+<!--&lt;!&ndash;  formattedHtml += '<h3>2. 模型诊断</h3>';&ndash;&gt;-->
+<!--  formattedHtml += '<ul style="margin-left: 0.1px;">'; // 减少左边距-->
+<!--  modelDiagnosis.trim().split('\n').forEach(line => {-->
+<!--    if (line.trim()) { // 忽略空行-->
+<!--      formattedHtml += `<li>模型诊断：${line.trim()}</li>`;-->
+<!--    }-->
+<!--  });-->
+<!--  formattedHtml += '</ul>';-->
+
+<!--  formattedHtml += '</div>';-->
+<!--  return formattedHtml;-->
+<!--}-->
+
+<!--function setActiveButton(activeButton) {-->
+<!--  const buttons = document.querySelectorAll('.three-d-button');-->
+<!--  buttons.forEach(button => {-->
+<!--    button.classList.remove('button-active');-->
+<!--  });-->
+<!--  activeButton.classList.add('button-active');-->
+<!--}-->
+
+// 当点击“生成报告”按钮时，显示右侧面板
+document.getElementById("reportBtn").addEventListener("click", function() {
+  console.log("Report button clicked");
+  document.getElementById("reportContainer").style.display = "block";
+  setActiveButton(this);
+});
+
+function setActiveButton(activeButton) {
+  const buttons = document.querySelectorAll('.three-d-button');
+  buttons.forEach(button => {
+    button.classList.remove('button-active');
+  });
+  activeButton.classList.add('button-active');
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+  // 增强版时间格式化函数
+  const formatDateTime = (date) => {
+    const year = date.getFullYear();
+    const month = (date.getMonth() + 1).toString().padStart(2, '0');
+    const day = date.getDate().toString().padStart(2, '0');
+    const hours = date.getHours().toString().padStart(2, '0');
+    const minutes = date.getMinutes().toString().padStart(2, '0');
+    return `${year}年${month}月${day}日 ${hours}:${minutes}`;
+  };
+
+  const timeElement = document.getElementById('report-time');
+  if(timeElement) {
+    timeElement.textContent = formatDateTime(new Date());
+  }
+});
+
+<!--    // 当点击“生成报告”按钮时，显示右侧面板-->
+<!--    document.getElementById("reportBtn").addEventListener("click", function() {-->
+<!--      console.log("Report button clicked");-->
+<!--      document.getElementById("reportContainer").style.display = "block";-->
+<!--      setActiveButton(this);-->
+<!--    });-->
+
+<!--    function setActiveButton(activeButton) {-->
+<!--      const buttons = document.querySelectorAll('.three-d-button');-->
+<!--      buttons.forEach(button => {-->
+<!--        button.classList.remove('button-active');-->
+<!--      });-->
+<!--      activeButton.classList.add('button-active');-->
+<!--    }-->
+
+<!--    document.addEventListener('DOMContentLoaded', function() {-->
+<!--      const timeElement = document.getElementById('report-time');-->
+
+<!--      // 增强版时间格式化函数-->
+<!--      const formatDateTime = (date) => {-->
+<!--          const year = date.getFullYear();-->
+<!--          const month = (date.getMonth() + 1).toString().padStart(2, '0');-->
+<!--          const day = date.getDate().toString().padStart(2, '0');-->
+<!--          const hours = date.getHours().toString().padStart(2, '0');-->
+<!--          const minutes = date.getMinutes().toString().padStart(2, '0');-->
+<!--          return `${year}年${month}月${day}日 ${hours}:${minutes}`;-->
+<!--      };-->
+
+<!--      if(timeElement) {-->
+<!--          timeElement.textContent = formatDateTime(new Date());-->
+<!--      }-->
+
+<!--      // 通过Ajax将数据传输到后端-->
+<!--      const ultrasoundFindings = {-->
+<!--          part: "检查部位：甲状腺",-->
+<!--          size: "甲状腺右叶大小：4.5×2.0×1.8cm，左叶大小：4.3×2.1×1.7cm",-->
+<!--          nodule: "右侧叶中部见低回声结节，大小约0.8×0.6cm，边界尚清，形态尚规则，内见点状强回声",-->
+<!--          cdfi: "CDFI：结节内可见血流信号",-->
+<!--          lymphNodes: "双侧颈部未见明显异常肿大淋巴结"-->
+<!--      };-->
+
+<!--      fetch('/submit-ultrasound-findings', {-->
+<!--          method: 'POST',-->
+<!--          headers: {-->
+<!--              'Content-Type': 'application/json'-->
+<!--          },-->
+<!--          body: JSON.stringify(ultrasoundFindings)-->
+<!--      })-->
+<!--      .then(response => response.json())-->
+<!--      .then(data => {-->
+<!--          if (data.success) {-->
+<!--              document.getElementById('transfer-success').style.display = 'block';-->
+<!--              document.getElementById('transfer-success').innerText = data.success; // 显示返回的响应-->
+<!--          }-->
+<!--      })-->
+<!--      .catch(error => {-->
+<!--          console.error('Error:', error);-->
+<!--      });-->
+<!--    });-->
+  </script>
+</body>
+</html>
